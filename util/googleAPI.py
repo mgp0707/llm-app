@@ -222,10 +222,61 @@ class Chat:
                                           """, stream=True)
         response.resolve()
 
-    def make_chat(self, text_input):
-        response = self.chat.send_message(text_input, stream=True)
+
+class Debater:
+    def __init__(self, debate_topic):
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.chat = self.model.start_chat(history=[])
+        self.history = []
+        response = self.chat.send_message(f"""You are a professional debator, who debates other individuals. You MUST agree with the 
+                                          debating topic. Your response MUST be less than 100 words.The topic that you will be debating
+                                          about will be {debate_topic}, where your response should be less than 100 words, to outpoint the opponent in terms of 
+                                          debating, so that you will win.""", stream=True)
         response.resolve()
+        self.evaluator = genai.GenerativeModel('gemini-1.5-flash')
+        self.evaluation = self.evaluator.start_chat(history=[])
+        resposne = self.evaluation.send_message(f""" You are a judge that evaluates a debate. You MUST be objective, and solely
+                                                decide upon the two arguments. You will be receiving a history of debate.
+
+                                                Your output should be the win rate that you would expect if this conversation was 
+                                                made at a real court, as well as detailed reasoning.
+                                                
+                                                For example:
+
+                                                Result:
+                                                User : 70%
+                                                Model : 30%
+
+                                                <Detailed, logical reaonsing of why you evaluated as such>
+                                                """)
+        response.resolve()
+    
+    def generate_chat(self, debate_topic):
+        self.history.append({"role": "user", "message": debate_topic})
+        response = self.chat.send_message(debate_topic, stream=True)
+        response.resolve()
+        clean_response = self.clean_text(response.text)
+        self.history.append({"role": "model", "message": clean_response})
+        return self.format_history()
+    
+    def evaluate(self):
+        response = self.evaluation.send_message(self.format_history())
         return response.text
+
+    def clean_text(self, text):
+        # Remove special tags like <ctrl100>
+        clean_text = re.sub(r'<.*?>', '', text)
+        return clean_text
+
+    def format_history(self):
+        formatted_history = ""
+        for entry in self.history:
+            if entry["role"] == "user":
+                formatted_history += f"User: {entry['message']}\n\n"
+            elif entry["role"] == "model":
+                formatted_history += f"Model: {entry['message']}\n\n"
+        return formatted_history.strip()
+    
 
 class ChatBot:
     def __init__(self):
